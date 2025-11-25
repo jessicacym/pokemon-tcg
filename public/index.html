@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宝可梦TCG卡牌价格查询</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .search-box {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .search-box input, .search-box select {
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 150px;
+        }
+        .search-box button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .card-item {
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .card-item:hover { transform: translateY(-5px); }
+        .card-item img { width: 100%; padding: 10px; }
+        .card-info { padding: 15px; }
+        .card-name { font-weight: bold; font-size: 16px; color: #333; }
+        .card-set { color: #666; font-size: 12px; margin: 5px 0; }
+        .card-prices {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+        .price-label { font-size: 12px; color: #888; }
+        .price-value { font-weight: bold; color: #e74c3c; }
+        .loading, .no-results {
+            text-align: center;
+            color: #fff;
+            padding: 40px;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .pagination button {
+            padding: 10px 20px;
+            background: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .pagination button:disabled { opacity: 0.5; }
+        .total-info {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎴 宝可梦TCG卡牌价格查询</h1>
+        <div class="search-box">
+            <input type="text" id="cardName" placeholder="卡牌名称（英文，如 Pikachu）">
+            <select id="rarity">
+                <option value="">所有稀有度</option>
+                <option value="Common">Common</option>
+                <option value="Uncommon">Uncommon</option>
+                <option value="Rare">Rare</option>
+                <option value="Rare Holo">Rare Holo</option>
+                <option value="Rare Holo V">Rare Holo V</option>
+                <option value="Rare Ultra">Rare Ultra</option>
+            </select>
+            <button onclick="searchCards(1)">🔍 搜索</button>
+        </div>
+        <div id="totalInfo" class="total-info"></div>
+        <div id="results" class="cards-grid"></div>
+        <div id="pagination" class="pagination"></div>
+    </div>
+    <script>
+        let currentPage = 1, totalPages = 1;
+        
+        async function searchCards(page = 1) {
+            const name = document.getElementById('cardName').value.trim();
+            const rarity = document.getElementById('rarity').value;
+            const results = document.getElementById('results');
+            const totalInfo = document.getElementById('totalInfo');
+            const pagination = document.getElementById('pagination');
+            
+            currentPage = page;
+            results.innerHTML = '<div class="loading">🔄 搜索中...</div>';
+            totalInfo.innerHTML = '';
+            pagination.innerHTML = '';
+            
+            try {
+                const params = new URLSearchParams();
+                if (name) params.append('name', name);
+                if (rarity) params.append('rarity', rarity);
+                params.append('page', page);
+                
+                const response = await fetch('https://api.pokemontcg.io/v2/cards?' + params);
+                const data = await response.json();
+                
+                if (data.data && data.data.length > 0) {
+                    totalPages = Math.ceil((data.totalCount || data.data.length) / 20);
+                    totalInfo.innerHTML = '找到 <strong>' + (data.totalCount || data.data.length) + '</strong> 张卡牌';
+                    
+                    results.innerHTML = data.data.map(card => 
+                        '<div class="card-item">' +
+                        '<img src="' + card.images.small + '" alt="' + card.name + '">' +
+                        '<div class="card-info">' +
+                        '<div class="card-name">' + card.name + '</div>' +
+                        '<div class="card-set">' + card.set.name + ' • ' + (card.rarity || 'N/A') + '</div>' +
+                        '<div class="card-prices">' + getPricesHTML(card) + '</div>' +
+                        '</div></div>'
+                    ).join('');
+                    
+                    pagination.innerHTML = 
+                        '<button onclick="searchCards(' + (page-1) + ')" ' + (page<=1?'disabled':'') + '>⬅ 上一页</button>' +
+                        '<button onclick="searchCards(' + (page+1) + ')" ' + (page>=totalPages?'disabled':'') + '>下一页 ➡</button>';
+                } else {
+                    results.innerHTML = '<div class="no-results">😢 未找到卡牌</div>';
+                }
+            } catch (error) {
+                results.innerHTML = '<div class="no-results">❌ 查询出错</div>';
+            }
+        }
+        
+        function getPricesHTML(card) {
+            if (card.tcgplayer && card.tcgplayer.prices) {
+                const prices = card.tcgplayer.prices;
+                const type = Object.keys(prices)[0];
+                if (type && prices[type].market) {
+                    return '<div class="price-row"><span class="price-label">市场价</span><span class="price-value">$' + prices[type].market.toFixed(2) + '</span></div>';
+                }
+            }
+            if (card.cardmarket && card.cardmarket.prices && card.cardmarket.prices.averageSellPrice) {
+                return '<div class="price-row"><span class="price-label">平均价</span><span class="price-value">€' + card.cardmarket.prices.averageSellPrice.toFixed(2) + '</span></div>';
+            }
+            return '<div class="price-row"><span class="price-label">价格</span><span class="price-value">暂无</span></div>';
+        }
+        
+        document.getElementById('cardName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') searchCards(1);
+        });
+        
+        searchCards(1);
+    </script>
+</body>
+</html>
